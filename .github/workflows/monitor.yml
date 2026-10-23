@@ -2,14 +2,13 @@ name: BasicFit Job Monitor
 
 on:
   schedule:
-    # Запуск кожні 20 хвилин (мінімальний інтервал GitHub Actions)
     - cron: '*/20 * * * *'
-  workflow_dispatch: # Дозволяє запускати вручну для тестування
+  workflow_dispatch:
 
 jobs:
   monitor:
     runs-on: ubuntu-latest
-    timeout-minutes: 10 # Запобігає нескінченному виконанню, якщо щось піде не так
+    timeout-minutes: 10
 
     steps:
       - name: Checkout repository
@@ -26,7 +25,6 @@ jobs:
           pip install -r requirements.txt
           python -m playwright install chromium --with-deps
 
-      # --- КРОК ДЛЯ ЗБЕРЕЖЕННЯ СТАНУ ---
       - name: Restore seen jobs cache
         uses: actions/cache/restore@v4
         with:
@@ -42,10 +40,9 @@ jobs:
           BASICFIT_CAREERS_URL: ${{ secrets.BASICFIT_CAREERS_URL }}
         run: python monitor_github.py
 
-      # --- КРОК ДЛЯ ОНОВЛЕННЯ КЕШУ ---
       - name: Save seen jobs cache
         uses: actions/cache/save@v4
-        if: always() # Зберігаємо кеш, навіть якщо скрипт впав з помилкою
+        if: always()
         with:
           path: seen_jobs.json
           key: seen-jobs-v1-${{ github.run_id }}
