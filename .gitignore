@@ -1,0 +1,11 @@
+venv/
+__pycache__/
+*.pyc
+applications.db
+applied_jobs.json
+screenshot_*.png
+cover_*.pdf
+cover_letter_tmp.docx
+out.txt
+automation_ids*.txt
+signal.txt

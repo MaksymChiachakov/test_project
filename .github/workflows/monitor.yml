@@ -1,14 +1,14 @@
-name: BasicFit Job Monitor
+name: BasicFit Auto-Apply
 
 on:
   schedule:
-    - cron: '*/20 * * * *'
-  workflow_dispatch:
+    - cron: '*/10 * * * *'   # Toutes les 10 minutes
+  workflow_dispatch:           # Permet aussi un lancement manuel
 
 jobs:
-  monitor:
+  auto-apply:
     runs-on: ubuntu-latest
-    timeout-minutes: 15 # Збільшено для запасу
+    timeout-minutes: 45        # Assez long pour plusieurs candidatures Playwright
 
     steps:
       - name: Checkout repository
@@ -24,7 +24,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      # --- КЕШУВАННЯ БРАУЗЕРА PLAYWRIGHT ---
+      # --- Cache Playwright (comme avant) ---
       - name: Cache Playwright browsers
         id: playwright-cache
         uses: actions/cache@v4
@@ -34,29 +34,30 @@ jobs:
           restore-keys: |
             playwright-${{ runner.os }}-
 
-      # Встановлюємо браузер ТІЛЬКИ якщо його немає в кеші
       - name: Install Playwright Chromium
         if: steps.playwright-cache.outputs.cache-hit != 'true'
         run: python -m playwright install chromium
 
-      - name: Restore seen jobs cache
+      # --- RESTAURATION DE L'ÉTAT (offres déjà postulées) ---
+      - name: Restore applied jobs state
         uses: actions/cache/restore@v4
         with:
-          path: seen_jobs.json
-          key: seen-jobs-v1
+          path: applied_jobs.json
+          key: applied-jobs-v1
           restore-keys: |
-            seen-jobs-v1
+            applied-jobs-v1
 
-      - name: Run Monitor
+      # --- LE CŒUR : détection + candidature ---
+      - name: Run Auto-Apply
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          BASICFIT_CAREERS_URL: ${{ secrets.BASICFIT_CAREERS_URL }}
-        run: python monitor_github.py
+        run: python monitor_and_apply.py
 
-      - name: Save seen jobs cache
+      # --- SAUVEGARDE DE L'ÉTAT (même en cas d'échec partiel) ---
+      - name: Save applied jobs state
         uses: actions/cache/save@v4
         if: always()
         with:
-          path: seen_jobs.json
-          key: seen-jobs-v1-${{ github.run_id }}
+          path: applied_jobs.json
+          key: applied-jobs-v1-${{ github.run_id }}
