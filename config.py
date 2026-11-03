@@ -52,5 +52,5 @@ PROFILE = {
     ),
 }
 
-CV_PATH = "CV_Maksym_Chiachakov_Basic_Fit_20h.pdf"
-LM_PATH = "Lettre_Maksym_Chiachakov_Basic_Fit.pdf"
+CV_PATH = "CV_MAKSYM_CHIACHAKOV.pdf"
+LM_PATH = "LM_MAKSYM_CHIACHAKOV.pdf"
