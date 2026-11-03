@@ -117,6 +117,8 @@ def main(job_url: str) -> bool:
 
             fill_select(page, "name--legalName--title", PROFILE["title"])
             fill_select(page, "address--countryRegion", PROFILE["department"])
+            fill_select(page, "country--country", PROFILE["country"])
+
 
             fill_input(page, '#name--legalName--firstName', PROFILE["first_name"])
             fill_input(page, '#name--legalName--lastName', PROFILE["last_name"])

@@ -19,6 +19,7 @@ PROFILE = {
     "address_line2": "Avenue Marceau",
     "city": "Courbevoie",
     "postal_code": "92400",
+    "country": "France",
     "department": "Hauts-de-Seine",
     
     "how_known": "Connection in the company",
