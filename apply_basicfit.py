@@ -25,33 +25,51 @@ def send_telegram_photo(photo_path, caption):
         print(f"⚠️ Telegram error: {e}")
 
 
-def fill_select(page, field_id, value, max_retries=2):
+from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
+
+def fill_select(page, field_id, value, max_retries=3):
     for attempt in range(1, max_retries + 1):
         print(f"  -> Sélection '{value}' pour '{field_id}' (essai {attempt})...")
+        
+        # 1. Localiser le bouton du dropdown
         button = page.locator(f'#{field_id}')
         try:
-            button.wait_for(state="visible", timeout=8000)
+            button.wait_for(state="visible", timeout=10000)
         except PlaywrightTimeoutError:
             print(f"  ⚠️ Champ '{field_id}' introuvable.")
-            return False
-        try:
-            button.click()
-        except Exception as e:
-            print(f"  ⚠️ Clic impossible sur '{field_id}': {e}")
             continue
-        option = page.locator('li[role="option"]').filter(has_text=value)
-        try:
-            option.first.wait_for(state="visible", timeout=8000)
-            option.first.click()
-            time.sleep(0.8)
-            print(f"  ✅ '{value}' sélectionné.")
-            return True
-        except PlaywrightTimeoutError:
-            print(f"  ⚠️ Option '{value}' non trouvée pour '{field_id}'.")
-            page.keyboard.press("Escape")
-            time.sleep(0.5)
-    return False
 
+        # 2. Ouvrir le menu
+        try:
+            button.click(timeout=5000)
+            # Attendre que le menu déroulant soit réellement attaché au DOM
+            page.wait_for_selector('li[role="option"]', state="attached", timeout=5000)
+        except Exception as e:
+            print(f"  ⚠️ Impossible d'ouvrir le menu '{field_id}': {e}")
+            continue
+
+        # 3. Chercher l'option correspondante
+        option = page.locator('li[role="option"]').filter(has_text=value)
+        
+        try:
+            option.first.wait_for(state="visible", timeout=5000)
+            option.first.click(force=True)
+            time.sleep(0.5) # Laisser le temps à React/Workday de traiter l'événement
+            
+            # 4. VÉRIFICATION CRUCIALE : le bouton contient-il maintenant la valeur ?
+            current_text = button.inner_text()
+            if value.lower() in current_text.lower():
+                print(f"  ✅ '{value}' sélectionné et validé.")
+                return True
+            else:
+                print(f"  ⚠️ La valeur affichée ('{current_text}') ne correspond pas.")
+                
+        except PlaywrightTimeoutError:
+            print(f"  ⚠️ Option '{value}' non trouvée dans la liste.")
+            page.keyboard.press("Escape")
+            time.sleep(1)
+
+    return False
 
 def fill_input(page, selector, value):
     try:
@@ -61,8 +79,24 @@ def fill_input(page, selector, value):
 
 
 def click_next(page):
+    """Clique sur Suivant et vérifie s'il y a des erreurs de validation."""
     page.click('[data-automation-id="pageFooterNextButton"]')
-    time.sleep(3)
+    time.sleep(2) # Petit délai pour laisser le temps à Workday de réagir
+
+    # Vérifier si le bandeau d'erreur "Errors Found" est apparu
+    error_banner = page.locator('text="Errors Found"')
+    if error_banner.is_visible():
+        print("🚨 ERREUR DE VALIDATION WORKDAY !")
+        # Extraire le texte des erreurs pour le log
+        try:
+            errors = page.locator('[data-automation-id="errorBanner"] li').all_inner_texts()
+            for err in errors:
+                print(f"   - {err}")
+        except:
+            print("   - Impossible de lire le détail des erreurs.")
+        return False # Signale que la page n'a pas été validée
+        
+    return True
 
 
 def main(job_url: str) -> bool:
@@ -73,8 +107,8 @@ def main(job_url: str) -> bool:
     with sync_playwright() as p:
         # browser = p.chromium.launch(headless=False, slow_mo=300)
         # Dans apply_basicfit.py, ligne du lancement du navigateur :
-        browser = p.chromium.launch(headless=True, slow_mo=100)   # headless pour CI
-        context = browser.new_context()
+        browser = p.chromium.launch(headless=True, slow_mo=150)   # headless pour CI
+        context = browser.new_context(viewport={"width": 1280, "height": 800})
         page = context.new_page()
         success = False
 

@@ -21,6 +21,7 @@ PROFILE = {
     "postal_code": "92400",
     "country": "France",
     "department": "Hauts-de-Seine",
+
     
     "how_known": "Connection in the company",
     "worked_before": "Non",
