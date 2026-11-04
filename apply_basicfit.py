@@ -25,13 +25,11 @@ def send_telegram_photo(photo_path, caption):
         print(f"⚠️ Telegram error: {e}")
 
 
-from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
-
 def fill_select(page, field_id, value, max_retries=3):
     for attempt in range(1, max_retries + 1):
         print(f"  -> Sélection '{value}' pour '{field_id}' (essai {attempt})...")
         
-        # 1. Localiser le bouton du dropdown
+        # 1. Localiser le champ (le bouton qui ouvre la liste)
         button = page.locator(f'#{field_id}')
         try:
             button.wait_for(state="visible", timeout=10000)
@@ -42,30 +40,36 @@ def fill_select(page, field_id, value, max_retries=3):
         # 2. Ouvrir le menu
         try:
             button.click(timeout=5000)
-            # Attendre que le menu déroulant soit réellement attaché au DOM
+            # Attendre que la liste des options apparaisse
             page.wait_for_selector('li[role="option"]', state="attached", timeout=5000)
         except Exception as e:
             print(f"  ⚠️ Impossible d'ouvrir le menu '{field_id}': {e}")
             continue
 
-        # 3. Chercher l'option correspondante
-        option = page.locator('li[role="option"]').filter(has_text=value)
-        
+        # 3. Stratégie 1 : Saisie au clavier (type-ahead) - Très fiable pour les longues listes
         try:
-            option.first.wait_for(state="visible", timeout=5000)
-            option.first.click(force=True)
-            time.sleep(0.5) # Laisser le temps à React/Workday de traiter l'événement
+            page.keyboard.type(value)
+            time.sleep(1) # Laisser le temps au filtre de s'appliquer
             
-            # 4. VÉRIFICATION CRUCIALE : le bouton contient-il maintenant la valeur ?
-            current_text = button.inner_text()
+            # Chercher l'option qui correspond exactement au texte
+            option = page.locator('li[role="option"]').filter(has_text=value).first
+            option.wait_for(state="visible", timeout=3000)
+            
+            # Cliquer sur l'option avec force pour éviter les problèmes d'interception
+            option.click(force=True)
+            time.sleep(0.5)
+            
+            # 4. Vérification CRUCIALE : le champ contient-il maintenant la bonne valeur ?
+            current_text = button.inner_text().strip()
             if value.lower() in current_text.lower():
                 print(f"  ✅ '{value}' sélectionné et validé.")
                 return True
             else:
-                print(f"  ⚠️ La valeur affichée ('{current_text}') ne correspond pas.")
+                print(f"  ⚠️ La valeur affichée ('{current_text}') ne correspond pas à '{value}'.")
                 
-        except PlaywrightTimeoutError:
-            print(f"  ⚠️ Option '{value}' non trouvée dans la liste.")
+        except Exception as e:
+            print(f"  ⚠️ Échec de la saisie pour '{field_id}': {e}")
+            # En cas d'échec, on ferme le menu pour réessayer proprement
             page.keyboard.press("Escape")
             time.sleep(1)
 
