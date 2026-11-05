@@ -28,53 +28,75 @@ def send_telegram_photo(photo_path, caption):
 def fill_select(page, field_id, value, max_retries=3):
     for attempt in range(1, max_retries + 1):
         print(f"  -> Sélection '{value}' pour '{field_id}' (essai {attempt})...")
-        button = page.locator(f'#{field_id}')
         
+        # 1. Localiser le champ (le bouton qui ouvre la liste)
+        button = page.locator(f'#{field_id}')
         try:
-            button.scroll_into_view_if_needed()
             button.wait_for(state="visible", timeout=10000)
         except PlaywrightTimeoutError:
             print(f"  ⚠️ Champ '{field_id}' introuvable.")
             continue
 
+        # 2. Ouvrir le menu
         try:
-            button.click()
-            page.wait_for_selector('li[role="option"]', state="visible", timeout=5000)
+            button.click(timeout=5000)
+            # Attendre que la liste des options apparaisse
+            page.wait_for_selector('li[role="option"]', state="attached", timeout=5000)
+        except Exception as e:
+            print(f"  ⚠️ Impossible d'ouvrir le menu '{field_id}': {e}")
+            continue
+
+        # 3. Stratégie 1 : Saisie au clavier (type-ahead) - Très fiable pour les longues listes
+        try:
+            page.keyboard.type(value)
+            time.sleep(1) # Laisser le temps au filtre de s'appliquer
             
+            # Chercher l'option qui correspond exactement au texte
             option = page.locator('li[role="option"]').filter(has_text=value).first
-            option.wait_for(state="visible", timeout=5000)
-            option.click()
-            time.sleep(1) # Laisser le temps à React de mouliner
-
-            current_text = button.inner_text().strip()
+            option.wait_for(state="visible", timeout=3000)
             
-            # VÉRIFICATION CRUCIALE : Lire la valeur de l'input caché de Workday
-            hidden_input_val = page.evaluate(f'''() => {{
-                const btn = document.getElementById('{field_id}');
-                const input = btn.nextElementSibling; // Workday met l'input juste après le bouton
-                return input && input.tagName === 'INPUT' ? input.value : '';
-            }}''')
-
-            if value.lower() in current_text.lower() and hidden_input_val != "":
-                print(f"  ✅ '{value}' sélectionné et validé (ID React: {hidden_input_val[:5]}...).")
+            # Cliquer sur l'option avec force pour éviter les problèmes d'interception
+            option.click(force=True)
+            time.sleep(0.5)
+            
+            # 4. Vérification CRUCIALE : le champ contient-il maintenant la bonne valeur ?
+            current_text = button.inner_text().strip()
+            if value.lower() in current_text.lower():
+                print(f"  ✅ '{value}' sélectionné et validé.")
                 return True
             else:
-                print(f"  ⚠️ Valeur affichée mais React n'a pas enregistré (input: '{hidden_input_val}').")
+                print(f"  ⚠️ La valeur affichée ('{current_text}') ne correspond pas à '{value}'.")
+                
         except Exception as e:
-            print(f"  ⚠️ Échec pour '{field_id}': {e}")
+            print(f"  ⚠️ Échec de la saisie pour '{field_id}': {e}")
+            # En cas d'échec, on ferme le menu pour réessayer proprement
             page.keyboard.press("Escape")
             time.sleep(1)
+
     return False
 
 def fill_input(page, selector, value):
     try:
-        locator = page.locator(selector)
-        locator.wait_for(state="visible", timeout=5000)
-        locator.fill(value)
-        locator.press("Tab") # TRÈS IMPORTANT : force React à valider le champ
-        time.sleep(0.3)
+        # On utilise evaluate pour contourner le comportement de React
+        page.evaluate(f'''
+            (args) => {{
+                const el = document.querySelector('{selector}');
+                if (!el) return;
+                // Récupère le setter natif de la valeur
+                const setter = Object.getOwnPropertyDescriptor(
+                    window.HTMLInputElement.prototype, 'value'
+                ).set;
+                // Applique la valeur
+                setter.call(el, args.value);
+                // Déclenche les événements pour React
+                el.dispatchEvent(new Event('input', {{ bubbles: true }}));
+                el.dispatchEvent(new Event('change', {{ bubbles: true }}));
+            }}
+        ''', {"value": value})
+        time.sleep(0.3) # Laisse le temps à React de traiter l'événement
     except Exception as e:
         print(f"⚠️ Impossible de remplir '{selector}': {e}")
+
 
 def click_next(page):
     """Clique sur Suivant, vérifie les erreurs et attend la transition."""
@@ -112,6 +134,8 @@ def main(job_url: str) -> bool:
         try:
             print(f"\n🌐 Ouverture de l'offre : {job_url}")
             page.goto(job_url, wait_until="load", timeout=60000)
+            # Attendre que le bouton Postuler soit prêt
+            # Dans main(), après avoir créé la page
             page.set_default_timeout(60000)  # 60 secondes par défaut
             page.set_default_navigation_timeout(60000)
             page.wait_for_selector('[data-automation-id="adventureButton"]', timeout=60000)
