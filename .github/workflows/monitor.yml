@@ -1,4 +1,4 @@
-name: BasicFit Auto-Apply
+name: BasicFit Auto-Apply x2
 
 on:
   schedule:
