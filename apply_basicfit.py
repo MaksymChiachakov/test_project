@@ -79,25 +79,20 @@ def fill_input(page, selector, value):
 def click_next(page):
     """Clique sur Suivant, vérifie les erreurs et attend la transition."""
     page.click('[data-automation-id="pageFooterNextButton"]')
-    time.sleep(3) 
+    time.sleep(2) 
 
+    # Vérifier si le bandeau d'erreur est apparu
     error_banner = page.locator('text="Errors Found"')
     if error_banner.is_visible():
         print("🚨 ERREUR DE VALIDATION WORKDAY !")
-        err_msg = "Erreur inconnue"
         try:
             errors = page.locator('[data-automation-id="errorBanner"] li').all_inner_texts()
-            err_msg = "\n".join(errors)
-            print(f"   - {err_msg}")
+            for err in errors:
+                print(f"   - {err}")
         except:
             pass
-        
-        # On envoie l'erreur sur Telegram pour la voir directement
-        page.screenshot(path="screenshot_error.png")
-        send_telegram_photo("screenshot_error.png", f"🚨 Validation Workday échouée :\n{err_msg}")
-        
-        # On lève l'exception pour arrêter
-        raise Exception(f"Validation échouée : {err_msg}")
+        # On lève une exception pour arrêter le script immédiatement
+        raise Exception("Validation échouée. Vérifie les champs.")
         
     return True
 
@@ -146,11 +141,11 @@ def main(job_url: str) -> bool:
             print("📝 Remplissage des données personnelles...")
             fill_select(page, "source--source", PROFILE["how_known"])
 
-          # Dans la PAGE 2, remplace le bloc try/except du worked_before par :
             try:
-                # On clique sur le label textuel au lieu de l'input
-                page.locator(f'#previousWorker--candidateIsPreviousWorker label:has-text("{PROFILE["worked_before"]}")').click()
-                time.sleep(0.5)
+                if PROFILE["worked_before"] == "Non":
+                    page.check('#previousWorker--candidateIsPreviousWorker input[value="false"]')
+                else:
+                    page.check('#previousWorker--candidateIsPreviousWorker input[value="true"]')
             except Exception as e:
                 print(f"⚠️ Radio worked_before: {e}")
 
