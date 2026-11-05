@@ -77,31 +77,46 @@ def fill_select(page, field_id, value, max_retries=3):
 
 def fill_input(page, selector, value):
     try:
-        page.fill(selector, value)
+        # On utilise evaluate pour contourner le comportement de React
+        page.evaluate(f'''
+            (args) => {{
+                const el = document.querySelector('{selector}');
+                if (!el) return;
+                // Récupère le setter natif de la valeur
+                const setter = Object.getOwnPropertyDescriptor(
+                    window.HTMLInputElement.prototype, 'value'
+                ).set;
+                // Applique la valeur
+                setter.call(el, args.value);
+                // Déclenche les événements pour React
+                el.dispatchEvent(new Event('input', {{ bubbles: true }}));
+                el.dispatchEvent(new Event('change', {{ bubbles: true }}));
+            }}
+        ''', {"value": value})
+        time.sleep(0.3) # Laisse le temps à React de traiter l'événement
     except Exception as e:
         print(f"⚠️ Impossible de remplir '{selector}': {e}")
 
 
 def click_next(page):
-    """Clique sur Suivant et vérifie s'il y a des erreurs de validation."""
+    """Clique sur Suivant, vérifie les erreurs et attend la transition."""
     page.click('[data-automation-id="pageFooterNextButton"]')
-    time.sleep(2) # Petit délai pour laisser le temps à Workday de réagir
+    time.sleep(2) 
 
-    # Vérifier si le bandeau d'erreur "Errors Found" est apparu
+    # Vérifier si le bandeau d'erreur est apparu
     error_banner = page.locator('text="Errors Found"')
     if error_banner.is_visible():
         print("🚨 ERREUR DE VALIDATION WORKDAY !")
-        # Extraire le texte des erreurs pour le log
         try:
             errors = page.locator('[data-automation-id="errorBanner"] li').all_inner_texts()
             for err in errors:
                 print(f"   - {err}")
         except:
-            print("   - Impossible de lire le détail des erreurs.")
-        return False # Signale que la page n'a pas été validée
+            pass
+        # On lève une exception pour arrêter le script immédiatement
+        raise Exception("Validation échouée. Vérifie les champs.")
         
     return True
-
 
 def main(job_url: str) -> bool:
     """
@@ -119,6 +134,9 @@ def main(job_url: str) -> bool:
         try:
             print(f"\n🌐 Ouverture de l'offre : {job_url}")
             page.goto(job_url, wait_until="load", timeout=60000)
+            page.set_default_timeout(60000)  # 60 secondes par défaut
+            page.set_default_navigation_timeout(60000)
+            page.wait_for_selector('[data-automation-id="adventureButton"]', timeout=60000)
 
             print("👆 Clic sur Postuler...")
             page.click('[data-automation-id="adventureButton"]')
