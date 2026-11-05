@@ -10,7 +10,7 @@ TELEGRAM_CHAT_ID="5752680953"
 
 # Tes infos personnelles
 PROFILE = {
-    "title": "Mr.",
+    "title": "Monsieur",
     "first_name": "Maksym",
     "last_name": "Chiachakov",
     "email": "chiachakovm@gmail.com",
