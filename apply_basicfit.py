@@ -127,7 +127,7 @@ def main(job_url: str) -> bool:
         # browser = p.chromium.launch(headless=False, slow_mo=300)
         # Dans apply_basicfit.py, ligne du lancement du navigateur :
         browser = p.chromium.launch(headless=True, slow_mo=400)   # headless pour CI
-        context = browser.new_context(viewport={"width": 1280, "height": 800})
+        context = browser.new_context(viewport={"width": 1280, "height": 800}, locale="fr-FR")
         page = context.new_page()
         success = False
 

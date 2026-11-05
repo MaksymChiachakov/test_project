@@ -63,7 +63,8 @@ def fetch_all_jobs():
             jobs.append({
                 "title": p.get("title", ""),
                 "external_path": ext,
-                "job_url": f"https://{TENANT}.{CLUSTER}.myworkdayjobs.com/{SITE}{ext}",
+                # ⚠️ LA MODIFICATION EST ICI : on ajoute /fr-FR/
+                "job_url": f"https://{TENANT}.{CLUSTER}.myworkdayjobs.com/fr-FR/{SITE}{ext}",
             })
         offset += limit
         if offset >= data.get("total", 0):
