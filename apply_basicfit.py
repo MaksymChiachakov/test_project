@@ -111,18 +111,18 @@ def main(job_url: str) -> bool:
     with sync_playwright() as p:
         # browser = p.chromium.launch(headless=False, slow_mo=300)
         # Dans apply_basicfit.py, ligne du lancement du navigateur :
-        browser = p.chromium.launch(headless=True, slow_mo=150)   # headless pour CI
+        browser = p.chromium.launch(headless=True, slow_mo=400)   # headless pour CI
         context = browser.new_context(viewport={"width": 1280, "height": 800})
         page = context.new_page()
         success = False
 
         try:
             print(f"\n🌐 Ouverture de l'offre : {job_url}")
-            page.goto(job_url, wait_until="networkidle", timeout=60000)
+            page.goto(job_url, wait_until="load", timeout=60000)
 
             print("👆 Clic sur Postuler...")
             page.click('[data-automation-id="adventureButton"]')
-            time.sleep(3)
+            time.sleep(5)
 
             print("📄 Clic sur 'Renseigner automatiquement à partir du CV'...")
             page.click('[data-automation-id="autofillWithResume"]')
@@ -138,7 +138,7 @@ def main(job_url: str) -> bool:
 
             click_next(page)
             print("⏳ Attente du chargement de la page 'Mes données personnelles'...")
-            page.wait_for_selector('[data-automation-id="applyFlowMyInfoPage"]', timeout=30000)
+            page.wait_for_selector('[data-automation-id="applyFlowMyInfoPage"]', timeout=60000)
             time.sleep(2)
 
             # ============ PAGE 2 : MES DONNÉES PERSONNELLES ============
@@ -168,7 +168,7 @@ def main(job_url: str) -> bool:
             fill_input(page, '#phoneNumber--phoneNumber', PROFILE["phone"])
 
             click_next(page)
-            time.sleep(3)
+            time.sleep(5)
 
             # ============ PAGE 3 : MON EXPÉRIENCE (upload LM) ============
             print("📤 Upload de la lettre de motivation...")
@@ -180,7 +180,7 @@ def main(job_url: str) -> bool:
                 print(f"⚠️ Upload LM: {e}")
 
             click_next(page)
-            time.sleep(3)
+            time.sleep(5)
 
             # ============ PAGE 4 : QUESTIONS DE CANDIDATURE ============
             print("❓ Remplissage des questions de candidature...")
@@ -197,7 +197,7 @@ def main(job_url: str) -> bool:
             fill_input(page, '#primaryQuestionnaire--51dfd5d6fbe510064f7bcbc8e09c0001', PROFILE["why_basicfit_answer"])
 
             click_next(page)
-            time.sleep(3)
+            time.sleep(5)
 
             # ============ PAGE 5 : CONDITIONS GÉNÉRALES ============
             print("📜 Acceptation des CGU...")
@@ -208,7 +208,7 @@ def main(job_url: str) -> bool:
                 print(f"⚠️ Checkbox CGU: {e}")
 
             click_next(page)
-            time.sleep(3)
+            time.sleep(5)
 
             # ============ PAGE 6 : RÉVISER ET SOUMETTRE ============
             print("🔍 Page de révision atteinte. Capture d'écran...")
@@ -217,7 +217,7 @@ def main(job_url: str) -> bool:
             send_telegram_photo("screenshot_review.png", "📋 Récapitulatif avant soumission.")
 
             print("⏳ Soumission automatique dans 3 secondes...")
-            time.sleep(3)
+            time.sleep(5)
             page.click('[data-automation-id="pageFooterNextButton"]')
             time.sleep(5)
 
