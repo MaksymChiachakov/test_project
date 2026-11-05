@@ -28,93 +28,76 @@ def send_telegram_photo(photo_path, caption):
 def fill_select(page, field_id, value, max_retries=3):
     for attempt in range(1, max_retries + 1):
         print(f"  -> Sélection '{value}' pour '{field_id}' (essai {attempt})...")
-        
-        # 1. Localiser le champ (le bouton qui ouvre la liste)
         button = page.locator(f'#{field_id}')
+        
         try:
+            button.scroll_into_view_if_needed()
             button.wait_for(state="visible", timeout=10000)
         except PlaywrightTimeoutError:
             print(f"  ⚠️ Champ '{field_id}' introuvable.")
             continue
 
-        # 2. Ouvrir le menu
         try:
-            button.click(timeout=5000)
-            # Attendre que la liste des options apparaisse
-            page.wait_for_selector('li[role="option"]', state="attached", timeout=5000)
-        except Exception as e:
-            print(f"  ⚠️ Impossible d'ouvrir le menu '{field_id}': {e}")
-            continue
-
-        # 3. Stratégie 1 : Saisie au clavier (type-ahead) - Très fiable pour les longues listes
-        try:
-            page.keyboard.type(value)
-            time.sleep(1) # Laisser le temps au filtre de s'appliquer
+            button.click()
+            page.wait_for_selector('li[role="option"]', state="visible", timeout=5000)
             
-            # Chercher l'option qui correspond exactement au texte
             option = page.locator('li[role="option"]').filter(has_text=value).first
-            option.wait_for(state="visible", timeout=3000)
-            
-            # Cliquer sur l'option avec force pour éviter les problèmes d'interception
-            option.click(force=True)
-            time.sleep(0.5)
-            
-            # 4. Vérification CRUCIALE : le champ contient-il maintenant la bonne valeur ?
+            option.wait_for(state="visible", timeout=5000)
+            option.click()
+            time.sleep(1) # Laisser le temps à React de mouliner
+
             current_text = button.inner_text().strip()
-            if value.lower() in current_text.lower():
-                print(f"  ✅ '{value}' sélectionné et validé.")
+            
+            # VÉRIFICATION CRUCIALE : Lire la valeur de l'input caché de Workday
+            hidden_input_val = page.evaluate(f'''() => {{
+                const btn = document.getElementById('{field_id}');
+                const input = btn.nextElementSibling; // Workday met l'input juste après le bouton
+                return input && input.tagName === 'INPUT' ? input.value : '';
+            }}''')
+
+            if value.lower() in current_text.lower() and hidden_input_val != "":
+                print(f"  ✅ '{value}' sélectionné et validé (ID React: {hidden_input_val[:5]}...).")
                 return True
             else:
-                print(f"  ⚠️ La valeur affichée ('{current_text}') ne correspond pas à '{value}'.")
-                
+                print(f"  ⚠️ Valeur affichée mais React n'a pas enregistré (input: '{hidden_input_val}').")
         except Exception as e:
-            print(f"  ⚠️ Échec de la saisie pour '{field_id}': {e}")
-            # En cas d'échec, on ferme le menu pour réessayer proprement
+            print(f"  ⚠️ Échec pour '{field_id}': {e}")
             page.keyboard.press("Escape")
             time.sleep(1)
-
     return False
 
 def fill_input(page, selector, value):
     try:
-        # On utilise evaluate pour contourner le comportement de React
-        page.evaluate(f'''
-            (args) => {{
-                const el = document.querySelector('{selector}');
-                if (!el) return;
-                // Récupère le setter natif de la valeur
-                const setter = Object.getOwnPropertyDescriptor(
-                    window.HTMLInputElement.prototype, 'value'
-                ).set;
-                // Applique la valeur
-                setter.call(el, args.value);
-                // Déclenche les événements pour React
-                el.dispatchEvent(new Event('input', {{ bubbles: true }}));
-                el.dispatchEvent(new Event('change', {{ bubbles: true }}));
-            }}
-        ''', {"value": value})
-        time.sleep(0.3) # Laisse le temps à React de traiter l'événement
+        locator = page.locator(selector)
+        locator.wait_for(state="visible", timeout=5000)
+        locator.fill(value)
+        locator.press("Tab") # TRÈS IMPORTANT : force React à valider le champ
+        time.sleep(0.3)
     except Exception as e:
         print(f"⚠️ Impossible de remplir '{selector}': {e}")
-
 
 def click_next(page):
     """Clique sur Suivant, vérifie les erreurs et attend la transition."""
     page.click('[data-automation-id="pageFooterNextButton"]')
-    time.sleep(2) 
+    time.sleep(3) 
 
-    # Vérifier si le bandeau d'erreur est apparu
     error_banner = page.locator('text="Errors Found"')
     if error_banner.is_visible():
         print("🚨 ERREUR DE VALIDATION WORKDAY !")
+        err_msg = "Erreur inconnue"
         try:
             errors = page.locator('[data-automation-id="errorBanner"] li').all_inner_texts()
-            for err in errors:
-                print(f"   - {err}")
+            err_msg = "\n".join(errors)
+            print(f"   - {err_msg}")
         except:
             pass
-        # On lève une exception pour arrêter le script immédiatement
-        raise Exception("Validation échouée. Vérifie les champs.")
+        
+        # On envoie l'erreur sur Telegram pour la voir directement
+        page.screenshot(path="screenshot_error.png")
+        send_telegram_photo("screenshot_error.png", f"🚨 Validation Workday échouée :\n{err_msg}")
+        
+        # On lève l'exception pour arrêter
+        raise Exception(f"Validation échouée : {err_msg}")
         
     return True
 
@@ -163,11 +146,11 @@ def main(job_url: str) -> bool:
             print("📝 Remplissage des données personnelles...")
             fill_select(page, "source--source", PROFILE["how_known"])
 
+          # Dans la PAGE 2, remplace le bloc try/except du worked_before par :
             try:
-                if PROFILE["worked_before"] == "Non":
-                    page.check('#previousWorker--candidateIsPreviousWorker input[value="false"]')
-                else:
-                    page.check('#previousWorker--candidateIsPreviousWorker input[value="true"]')
+                # On clique sur le label textuel au lieu de l'input
+                page.locator(f'#previousWorker--candidateIsPreviousWorker label:has-text("{PROFILE["worked_before"]}")').click()
+                time.sleep(0.5)
             except Exception as e:
                 print(f"⚠️ Radio worked_before: {e}")
 
